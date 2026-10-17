@@ -41,19 +41,27 @@ Structure your response EXACTLY in this JSON format:
   "escalation_reason": "Reason if escalation needed"
 }"""
 
-model = genai.GenerativeModel(
-    model_name="gemini-3.8-flash",
-    system_instruction=SYSTEM_PROMPT,
-    generation_config={
-        "temperature": 0.2,
-        "top_p": 0.8,
-        "max_output_tokens": 4096,
-        "response_mime_type": "application/json"
-    },
-    safety_settings={
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
-    }
-)
+PRIMARY_MODELS = [
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-flash-lite-latest",
+    "gemini-3.8-flash"
+]
+
+def get_diagnostic_model(model_name: str):
+    return genai.GenerativeModel(
+        model_name=model_name,
+        system_instruction=SYSTEM_PROMPT,
+        generation_config={
+            "temperature": 0.2,
+            "top_p": 0.8,
+            "max_output_tokens": 4096,
+            "response_mime_type": "application/json"
+        },
+        safety_settings={
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
+        }
+    )
 
 async def analyze_fault(
     car_brand: str,
@@ -68,7 +76,7 @@ async def analyze_fault(
     video_mime: str = "video/mp4"
 ) -> dict:
     """
-    Core multimodal analysis function using Gemini.
+    Core multimodal analysis function using Gemini with automated model fallback.
     Accepts text description + optional image/video + language preference.
     """
     prompt_text = f"""
@@ -110,7 +118,20 @@ async def analyze_fault(
             "data": base64.b64encode(video_data).decode("utf-8")
         })
 
-    response = model.generate_content(content_parts)
+    response = None
+    last_error = None
+    for model_name in PRIMARY_MODELS:
+        try:
+            m = get_diagnostic_model(model_name)
+            response = m.generate_content(content_parts)
+            break
+        except Exception as e:
+            last_error = e
+            print(f"Diagnostic model {model_name} failed: {e}. Falling back to next model...")
+            continue
+
+    if not response:
+        raise last_error or Exception("All diagnostic Gemini models exhausted.")
 
     import json
     try:
@@ -119,25 +140,30 @@ async def analyze_fault(
         return {"raw_response": response.text, "parse_error": True}
 
 
-# Chat model optimized for ultra-fast, conversational voice interaction
-chat_model = genai.GenerativeModel(
-    model_name="gemini-3.8-flash",
-    system_instruction="""You are MechAI, the mechanic's trusted workshop co-pilot created by TorqueIQ.
+VOICE_SYSTEM_PROMPT = """You are MechAI, the mechanic's trusted workshop co-pilot created by TorqueIQ.
 You are communicating directly via real-time VOICE with a busy technician working on a car in a garage.
 RULES FOR YOUR VOICE REPLIES:
 1. Be ultra-concise, conversational, and direct (1 to 2 crisp sentences max, strictly under 25 words).
 2. Answer the question immediately without disclaimers, preamble, or filler.
 3. NEVER use markdown symbols, asterisks (**), bullet points, or numbered lists, because your answer is spoken out loud through text-to-speech.
-4. If Hindi is requested, speak in natural garage Hindi using common mechanic terminology.""",
-    generation_config={
-        "temperature": 0.2,
-        "top_p": 0.8,
-        "max_output_tokens": 100
-    }
-)
+4. If Hindi is requested, speak in natural garage Hindi using common mechanic terminology."""
+
+def get_voice_chat_model(model_name: str):
+    return genai.GenerativeModel(
+        model_name=model_name,
+        system_instruction=VOICE_SYSTEM_PROMPT,
+        generation_config={
+            "temperature": 0.2,
+            "top_p": 0.8,
+            "max_output_tokens": 350
+        },
+        safety_settings={
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
+        }
+    )
 
 async def chat_followup(conversation_history: list, new_message: str, language: str = "en") -> str:
-    """Handle follow-up chat questions after initial diagnosis with ultra-fast latency."""
+    """Handle follow-up chat questions after initial diagnosis with automated model fallback."""
     formatted_history = []
     # Keep only the last 4 exchanges to keep context compact and super fast
     for msg in conversation_history[-4:]:
@@ -146,14 +172,37 @@ async def chat_followup(conversation_history: list, new_message: str, language: 
             "parts": msg["parts"]
         })
 
-    chat = chat_model.start_chat(history=formatted_history)
-    
     msg_to_send = new_message
     if language in ["hi", "hindi"]:
         msg_to_send += "\n[Reply in 1-2 punchy sentences in clear, natural Hindi for voice speech. Under 25 words.]"
     else:
         msg_to_send += "\n[Reply in 1-2 punchy sentences in clear, direct English for voice speech. Under 25 words.]"
 
-    response = chat.send_message(msg_to_send)
-    cleaned = response.text.replace('*', '').replace('#', '').strip()
+    response = None
+    last_err = None
+    for model_name in PRIMARY_MODELS:
+        try:
+            chat_model = get_voice_chat_model(model_name)
+            chat = chat_model.start_chat(history=formatted_history)
+            response = chat.send_message(msg_to_send)
+            break
+        except Exception as e:
+            last_err = e
+            print(f"Chat model {model_name} failed: {e}. Falling back to next model...")
+            continue
+
+    if not response:
+        raise last_err or Exception("All chat models exhausted.")
+
+    try:
+        raw_text = response.text
+    except Exception:
+        try:
+            raw_text = response.candidates[0].content.parts[0].text
+        except Exception:
+            raw_text = "I recommend checking this component directly in the workshop for safety."
+
+    cleaned = raw_text.replace('*', '').replace('#', '').strip()
     return cleaned
+
+
