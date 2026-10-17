@@ -38,6 +38,7 @@
 - 🎥 **Multimodal Video & Image Analysis**: Upload engine bay photos, gauge clusters, or videos of strange engine sounds analyzed directly by Gemini.
 - 📊 **Probabilistic Root Cause Breakdown**: Top 3 most probable root causes with confidence percentages and practical explanations.
 - 🛡️ **Driveability & Safety Advisory**: Real-time safety ratings (`SAFE`, `DRIVE WITH CAUTION`, `DO NOT DRIVE`) preventing catastrophic engine failure.
+- 🇮🇳 **Bilingual Workshop Support (English & Hindi)**: Instant toggle between English and Hindi with localized garage terminology, Hindi Speech-to-Text dictation, and spoken Hindi audio responses.
 - 📲 **Installable Progressive Web App (PWA)**: Works seamlessly across desktop, tablets, and mobile phones with native install support.
 
 ---
