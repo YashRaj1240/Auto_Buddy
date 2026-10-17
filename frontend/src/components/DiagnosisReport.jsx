@@ -23,6 +23,11 @@ export default function DiagnosisReport({ data }) {
   const [voiceModeActive, setVoiceModeActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
+  const voiceModeRef = useRef(false);
+
+  useEffect(() => {
+    voiceModeRef.current = voiceModeActive;
+  }, [voiceModeActive]);
 
   // Job Sheet & Interactive Steps State
   const [showJobSheet, setShowJobSheet] = useState(false);
@@ -86,23 +91,55 @@ export default function DiagnosisReport({ data }) {
   };
 
   const speakText = (text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel(); // Stop any ongoing speech
+    if (!window.speechSynthesis) {
+      console.warn('Speech synthesis not supported on this device');
+      return;
+    }
     
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    
-    utterance.onend = () => {
-      // AI finished speaking, restart listening if we're in voice mode
-      if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
-        setTimeout(() => {
-          try { recognitionRef.current.start(); } catch(e) {}
-        }, 300);
+    try {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume(); // Fix Chromium audio freeze
+
+      // Clean out markdown symbols so speech engine speaks fluently
+      const cleanText = text
+        .replace(/[*#_`~]/g, '')
+        .replace(/\n+/g, '. ')
+        .trim();
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.lang = 'en-US';
+
+      // Pick a natural English voice if available
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('David')));
+        if (preferredVoice) utterance.voice = preferredVoice;
       }
-    };
-    
-    window.speechSynthesis.speak(utterance);
+
+      utterance.onend = () => {
+        // AI finished speaking, restart listening if we're in voice mode
+        if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
+          setTimeout(() => {
+            try { recognitionRef.current.start(); } catch(e) {}
+          }, 300);
+        }
+      };
+
+      utterance.onerror = (e) => {
+        console.warn('Speech synthesis error:', e);
+        if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
+          setTimeout(() => {
+            try { recognitionRef.current.start(); } catch(err) {}
+          }, 300);
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.error('speakText error:', err);
+    }
   };
 
   const toggleVoiceMode = () => {
@@ -137,6 +174,8 @@ export default function DiagnosisReport({ data }) {
     setChatMessages(prev => [...prev, { role: 'user', text: messageText }]);
     setChatLoading(true);
 
+    const isVoice = voiceModeActive || voiceModeRef.current || window.isVoiceModeIntentionallyActive;
+
     try {
       const res = await axios.post(`${API_BASE}/chat/`, {
         session_id,
@@ -145,20 +184,19 @@ export default function DiagnosisReport({ data }) {
       const aiResponse = res.data.response;
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
       
-      if (voiceModeActive) {
+      if (isVoice) {
         speakText(aiResponse);
       }
     } catch (error) {
-      // Check if it's a 429 Quota Exceeded error from the backend
       const errorMsg = error.response?.data?.detail || '';
       if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('Rate limit')) {
         const rateLimitMsg = "We're asking questions too fast! The free Gemini API only allows 5 requests per minute. Please wait 15 seconds and ask again.";
         toast.error('Free Tier Limit Reached (Wait 15s)');
         setChatMessages(prev => [...prev, { role: 'ai', text: rateLimitMsg }]);
-        if (voiceModeActive) speakText("We are asking questions too fast. Please wait 15 seconds and ask again.");
+        if (isVoice) speakText("We are asking questions too fast. Please wait 15 seconds and ask again.");
       } else {
         toast.error('Chat failed. Please try again.');
-        if (voiceModeActive) speakText("Sorry, I encountered an error connecting to the server.");
+        if (isVoice) speakText("Sorry, I encountered an error connecting to the server.");
       }
     } finally {
       setChatLoading(false);
