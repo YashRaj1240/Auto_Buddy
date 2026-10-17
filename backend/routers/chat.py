@@ -53,9 +53,14 @@ async def send_chat_message(payload: ChatMessage):
             summary = diag.get('summary', '') if isinstance(diag, dict) else str(diag)[:150]
             car = diagnosis_data.get('car_info', {})
             car_str = f"{car.get('year', '')} {car.get('brand', '')} {car.get('model', '')}".strip() if isinstance(car, dict) else str(car)
-            context_intro = f"Vehicle: {car_str}. Issue: {diagnosis_data.get('issue_description')}. Diagnosis: {summary}."
-            history = [{"role": "user", "parts": [context_intro]},
-                      {"role": "model", "parts": ["Ready. How can I help with this repair?"]}]
+            if payload.language in ["hi", "hindi"]:
+                context_intro = f"वाहन: {car_str}. समस्या: {diagnosis_data.get('issue_description')}. डायग्नोसिस सारांश: {summary}."
+                history = [{"role": "user", "parts": [context_intro]},
+                          {"role": "model", "parts": ["नमस्ते, मैं इस गाड़ी की मरम्मत में आपकी क्या सहायता करूँ?"]}]
+            else:
+                context_intro = f"Vehicle: {car_str}. Issue: {diagnosis_data.get('issue_description')}. Diagnosis: {summary}."
+                history = [{"role": "user", "parts": [context_intro]},
+                          {"role": "model", "parts": ["Ready. How can I help with this repair?"]}]
 
         await try_save_chat_message(payload.session_id, "user", payload.message)
         

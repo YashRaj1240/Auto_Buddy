@@ -140,18 +140,26 @@ async def analyze_fault(
         return {"raw_response": response.text, "parse_error": True}
 
 
-VOICE_SYSTEM_PROMPT = """You are MechAI, the mechanic's trusted workshop co-pilot created by TorqueIQ.
+def get_voice_chat_model(model_name: str, language: str = "en"):
+    if language in ["hi", "hindi"]:
+        sys_inst = """You are MechAI, the mechanic's trusted workshop co-pilot created by TorqueIQ.
+MANDATORY LANGUAGE RULE: You MUST speak exclusively in HINDI (हिंदी भाषा) using Devanagari script.
+RULES FOR YOUR VOICE REPLIES:
+1. Speak in natural, clear Hindi used in Indian garages (उदा: "गाड़ी तुरंत बंद कर दें, इंजन को भारी नुकसान हो सकता है।").
+2. Keep answers short, direct, and conversational (1 to 2 crisp sentences max, strictly under 25 words).
+3. Do NOT use markdown symbols, asterisks (**), or bullet points.
+4. Under NO circumstance should you reply in English when Hindi is selected."""
+    else:
+        sys_inst = """You are MechAI, the mechanic's trusted workshop co-pilot created by TorqueIQ.
 You are communicating directly via real-time VOICE with a busy technician working on a car in a garage.
 RULES FOR YOUR VOICE REPLIES:
 1. Be ultra-concise, conversational, and direct (1 to 2 crisp sentences max, strictly under 25 words).
 2. Answer the question immediately without disclaimers, preamble, or filler.
-3. NEVER use markdown symbols, asterisks (**), bullet points, or numbered lists, because your answer is spoken out loud through text-to-speech.
-4. If Hindi is requested, speak in natural garage Hindi using common mechanic terminology."""
+3. NEVER use markdown symbols, asterisks (**), bullet points, or numbered lists, because your answer is spoken out loud through text-to-speech."""
 
-def get_voice_chat_model(model_name: str):
     return genai.GenerativeModel(
         model_name=model_name,
-        system_instruction=VOICE_SYSTEM_PROMPT,
+        system_instruction=sys_inst,
         generation_config={
             "temperature": 0.2,
             "top_p": 0.8,
@@ -172,17 +180,16 @@ async def chat_followup(conversation_history: list, new_message: str, language: 
             "parts": msg["parts"]
         })
 
-    msg_to_send = new_message
     if language in ["hi", "hindi"]:
-        msg_to_send += "\n[Reply in 1-2 punchy sentences in clear, natural Hindi for voice speech. Under 25 words.]"
+        msg_to_send = f"{new_message}\n[अनिवार्य: सिर्फ और सिर्फ हिंदी (Devanagari) में 1-2 छोटे वाक्यों में उत्तर दें। अंग्रेजी का प्रयोग न करें।]"
     else:
-        msg_to_send += "\n[Reply in 1-2 punchy sentences in clear, direct English for voice speech. Under 25 words.]"
+        msg_to_send = f"{new_message}\n[Reply in 1-2 punchy sentences in clear, direct English for voice speech. Under 25 words.]"
 
     response = None
     last_err = None
     for model_name in PRIMARY_MODELS:
         try:
-            chat_model = get_voice_chat_model(model_name)
+            chat_model = get_voice_chat_model(model_name, language=language)
             chat = chat_model.start_chat(history=formatted_history)
             response = chat.send_message(msg_to_send)
             break
@@ -200,9 +207,10 @@ async def chat_followup(conversation_history: list, new_message: str, language: 
         try:
             raw_text = response.candidates[0].content.parts[0].text
         except Exception:
-            raw_text = "I recommend checking this component directly in the workshop for safety."
+            raw_text = "कृपया इस खराबी की जांच गैरेज में किसी तकनीशियन से करवाएं।" if language in ["hi", "hindi"] else "I recommend checking this component directly in the workshop for safety."
 
     cleaned = raw_text.replace('*', '').replace('#', '').strip()
     return cleaned
+
 
 

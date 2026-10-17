@@ -171,7 +171,9 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     }
     
     try {
-      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
       window.speechSynthesis.resume(); // Fix Chromium audio freeze
 
       // Clean out markdown symbols so speech engine speaks fluently
@@ -180,13 +182,19 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         .replace(/\n+/g, '. ')
         .trim();
 
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.04; // Natural human conversational tempo
-      utterance.pitch = 1.0;
-      utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
+      if (!cleanText) return;
 
-      // Pick top neural/natural voice
-      const bestVoice = selectBestVoice(language);
+      // Smart script detection: if text has Devanagari characters, route to Hindi voice
+      const hasDevanagari = /[\u0900-\u097F]/.test(cleanText);
+      const isHindi = hasDevanagari || language === 'hi';
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1.0; // Steady 1.0 rate prevents choppy speech & audio breaking
+      utterance.pitch = 1.0;
+      utterance.lang = isHindi ? 'hi-IN' : 'en-US';
+
+      // Pick top neural/natural voice matched to language
+      const bestVoice = selectBestVoice(isHindi ? 'hi' : 'en');
       if (bestVoice) {
         utterance.voice = bestVoice;
       }
@@ -201,7 +209,7 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(e) {}
-          }, 250);
+          }, 300);
         }
       };
 
@@ -211,11 +219,19 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(err) {}
-          }, 250);
+          }, 300);
         }
       };
 
-      window.speechSynthesis.speak(utterance);
+      // 60ms gap allows Windows audio sink to initialize cleanly without buffer clipping
+      setTimeout(() => {
+        try {
+          window.speechSynthesis.speak(utterance);
+        } catch(e) {
+          console.error('speak error:', e);
+        }
+      }, 60);
+
     } catch (err) {
       setIsSpeaking(false);
       console.error('speakText error:', err);
