@@ -77,12 +77,15 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(587.33, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.13);
+      setTimeout(() => {
+        try { ctx.close(); } catch(e) {}
+      }, 300);
     } catch(e) {}
   };
 
@@ -176,25 +179,34 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       }
       window.speechSynthesis.resume(); // Fix Chromium audio freeze
 
-      // Clean out markdown symbols so speech engine speaks fluently
-      const cleanText = text
-        .replace(/[*#_`~]/g, '')
-        .replace(/\n+/g, '. ')
+      // Clean out markdown, symbols, slashes, brackets, colons that cause audio clipping
+      let cleanText = text
+        .replace(/[*#_`~()\[\]{}:;\\/\"'—–-]/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
 
       if (!cleanText) return;
 
-      // Smart script detection: if text has Devanagari characters, route to Hindi voice
+      // Ensure feminine grammar in Hindi if masculine pronouns appear
+      if (language === 'hi' || /[\u0900-\u097F]/.test(cleanText)) {
+        cleanText = cleanText
+          .replace(/कर रहा हूँ/g, 'कर रही हूँ')
+          .replace(/बता रहा हूँ/g, 'बता रही हूँ')
+          .replace(/सुन रहा हूँ/g, 'सुन रही हूँ')
+          .replace(/सोच रहा हूँ/g, 'सोच रही हूँ');
+      }
+
+      // Route based on actual characters: Devanagari goes to Hindi voice, English goes to English voice
       const hasDevanagari = /[\u0900-\u097F]/.test(cleanText);
-      const isHindi = hasDevanagari || language === 'hi';
+      const targetLang = hasDevanagari ? 'hi' : 'en';
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.0; // Steady 1.0 rate prevents choppy speech & audio breaking
+      utterance.rate = 0.95; // Steady, calm tempo prevents audio jitter and packet loss on Windows
       utterance.pitch = 1.0;
-      utterance.lang = isHindi ? 'hi-IN' : 'en-US';
+      utterance.lang = targetLang === 'hi' ? 'hi-IN' : 'en-US';
 
       // Pick top neural/natural voice matched to language
-      const bestVoice = selectBestVoice(isHindi ? 'hi' : 'en');
+      const bestVoice = selectBestVoice(targetLang);
       if (bestVoice) {
         utterance.voice = bestVoice;
       }
@@ -209,7 +221,7 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(e) {}
-          }, 300);
+          }, 350);
         }
       };
 
@@ -219,18 +231,18 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(err) {}
-          }, 300);
+          }, 350);
         }
       };
 
-      // 60ms gap allows Windows audio sink to initialize cleanly without buffer clipping
+      // 80ms gap allows Windows audio sink to initialize cleanly without buffer clipping
       setTimeout(() => {
         try {
           window.speechSynthesis.speak(utterance);
         } catch(e) {
           console.error('speak error:', e);
         }
-      }, 60);
+      }, 80);
 
     } catch (err) {
       setIsSpeaking(false);
@@ -262,7 +274,7 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       window.isVoiceModeIntentionallyActive = true;
       setChatOpen(true);
       const welcomeMsg = language === 'hi'
-        ? `वॉइस असिस्टेंट चालू हो गया है। मैं ${car_info.model} के बारे में आपके सवालों के जवाब देने के लिए तैयार हूँ।`
+        ? `वॉइस असिस्टेंट चालू हो गया है। मैं ${car_info.model} के बारे में आपके सभी सवालों के जवाब देने के लिए तैयार हूँ। आप कुछ भी पूछ सकती हैं।`
         : `Voice assistant activated. I'm ready to answer questions about the ${car_info.model}.`;
       speakText(welcomeMsg);
       toast.success(language === 'hi' ? 'वॉइस असिस्टेंट मोड चालू है' : 'Voice Assistant Mode ON');
@@ -563,17 +575,17 @@ export default function DiagnosisReport({ data, language = 'en' }) {
                 {chatLoading ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-amber-300 border-t-transparent rounded-full animate-spin" />
-                    <span>{language === 'hi' ? 'सोच रहा हूँ...' : 'Thinking...'}</span>
+                    <span>{language === 'hi' ? 'सोच रही हूँ...' : 'Thinking...'}</span>
                   </>
                 ) : isSpeaking ? (
                   <>
                     <FaVolumeUp className="animate-bounce text-emerald-300" />
-                    <span>{language === 'hi' ? 'बोल रहा हूँ...' : 'Speaking...'}</span>
+                    <span>{language === 'hi' ? 'बोल रही हूँ...' : 'Speaking...'}</span>
                   </>
                 ) : isListening ? (
                   <>
                     <FaMicrophone className="animate-pulse text-red-400" />
-                    <span>{language === 'hi' ? 'सुन रहा हूँ...' : 'Listening...'}</span>
+                    <span>{language === 'hi' ? 'सुन रही हूँ...' : 'Listening...'}</span>
                   </>
                 ) : (
                   <>
