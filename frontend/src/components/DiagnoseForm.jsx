@@ -26,6 +26,7 @@ export default function DiagnoseForm({ onSubmit, loading }) {
   const [carModel, setCarModel] = useState('');
   const [carYear, setCarYear] = useState('');
   const [issueText, setIssueText] = useState('');
+  const [obdCode, setObdCode] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [videoFile, setVideoFile] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -85,28 +86,69 @@ export default function DiagnoseForm({ onSubmit, loading }) {
   };
 
   // Browser Speech Recognition
-  const startSpeechToText = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast.error('Speech recognition not supported in this browser. Use Chrome.');
+  const toggleSpeechToText = () => {
+    if (isRecording) {
+      if (window.activeFormRecognition) {
+        try { window.activeFormRecognition.stop(); } catch(e) {}
+      }
+      setIsRecording(false);
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
 
-    recognition.onstart = () => setIsRecording(true);
-    recognition.onend = () => setIsRecording(false);
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(r => r[0].transcript).join('');
-      setIssueText(transcript);
-    };
-    recognition.start();
-    toast.success('Speak your issue now...');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error('Speech recognition not supported in this browser. Use Chrome or Edge.');
+      return;
+    }
+    
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
 
-    setTimeout(() => { recognition.stop(); }, 15000);
+      // Keep track of what was already in the box before we started speaking
+      let baseText = document.getElementById('issue-textarea')?.value || issueText || '';
+      baseText = baseText.trim() ? baseText + ' ' : '';
+
+      recognition.onstart = () => setIsRecording(true);
+      
+      recognition.onresult = (event) => {
+        let newTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            newTranscript += event.results[i][0].transcript + ' ';
+          }
+        }
+        
+        if (newTranscript) {
+          baseText += newTranscript;
+          setIssueText(baseText);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error === 'not-allowed') {
+          toast.error('Microphone blocked! Please allow access.');
+        } else if (event.error !== 'no-speech') {
+          console.error(event.error);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        window.activeFormRecognition = null;
+      };
+      
+      recognition.start();
+      window.activeFormRecognition = recognition;
+      toast.success('Microphone active! Tap mic icon again to stop.');
+      
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not start microphone. Check permissions.');
+      setIsRecording(false);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -115,7 +157,7 @@ export default function DiagnoseForm({ onSubmit, loading }) {
       toast.error('Please fill all required fields');
       return;
     }
-    onSubmit({ carBrand, carModel, carYear: parseInt(carYear), issueText, imageFile, videoFile });
+    onSubmit({ carBrand, carModel, carYear: parseInt(carYear), issueText, obdCode, imageFile, videoFile });
   };
 
   return (
@@ -179,6 +221,7 @@ export default function DiagnoseForm({ onSubmit, loading }) {
         </h2>
         <div className="relative">
           <textarea
+            id="issue-textarea"
             className="input-field min-h-[120px] resize-none pr-14"
             placeholder="Describe what's happening in plain English... e.g. 'Car won't start, clicking sound when turning key, dashboard battery light is on'"
             value={issueText}
@@ -187,10 +230,10 @@ export default function DiagnoseForm({ onSubmit, loading }) {
           />
           <button
             type="button"
-            onClick={startSpeechToText}
+            onClick={toggleSpeechToText}
             className={`absolute right-3 top-3 p-3 rounded-xl transition-all ${
               isRecording
-                ? 'bg-red-500 text-white pulse-blue'
+                ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/50'
                 : 'bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white'
             }`}
             title="Click to speak your issue"
@@ -199,8 +242,60 @@ export default function DiagnoseForm({ onSubmit, loading }) {
           </button>
         </div>
         {isRecording && (
-          <p className="text-red-400 text-sm mt-2 animate-pulse">🔴 Listening... speak now (auto-stops in 15s)</p>
+          <p className="text-red-400 text-sm mt-2 animate-pulse">🔴 Listening... Tap mic again to stop</p>
         )}
+
+        {/* OBD-II Fault Code (Optional) */}
+        <div className="mt-4 pt-4 border-t border-slate-700/50">
+          <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <span className="text-blue-400 font-bold">⚡</span> OBD-II Diagnostic Fault Code
+            </span>
+            <span className="text-slate-500 font-normal lowercase">(optional DTC code from scan tool)</span>
+          </label>
+          <div className="flex gap-2 mb-2.5">
+            <input
+              type="text"
+              className="input-field py-2 px-3 text-sm font-mono tracking-wider uppercase"
+              placeholder="e.g. P0300, P0420, P0171, P0455..."
+              value={obdCode}
+              onChange={e => setObdCode(e.target.value.toUpperCase())}
+            />
+            {obdCode && (
+              <button
+                type="button"
+                onClick={() => setObdCode('')}
+                className="px-3 py-1 bg-slate-800 text-slate-400 hover:text-white rounded-lg text-xs"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-400 mr-1">Common DTCs:</span>
+            {[
+              { code: 'P0300', desc: 'Random Misfire' },
+              { code: 'P0420', desc: 'Catalyst Efficiency' },
+              { code: 'P0171', desc: 'System Too Lean' },
+              { code: 'P0455', desc: 'EVAP Large Leak' },
+              { code: 'P0128', desc: 'Coolant Thermostat' }
+            ].map(item => (
+              <button
+                key={item.code}
+                type="button"
+                onClick={() => setObdCode(item.code)}
+                title={item.desc}
+                className={`text-xs px-2.5 py-1 rounded-md font-mono transition-all ${
+                  obdCode === item.code
+                    ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/30'
+                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/70'
+                }`}
+              >
+                {item.code} <span className="text-[10px] text-slate-400">({item.desc})</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Media Upload */}

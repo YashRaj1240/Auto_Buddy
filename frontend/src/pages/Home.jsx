@@ -11,7 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
-  const handleSubmit = async ({ carBrand, carModel, carYear, issueText, imageFile, videoFile }) => {
+  const handleSubmit = async ({ carBrand, carModel, carYear, issueText, obdCode, imageFile, videoFile }) => {
     setLoading(true);
     setResult(null);
 
@@ -21,6 +21,7 @@ export default function Home() {
       formData.append('car_model', carModel);
       formData.append('car_year', carYear);
       formData.append('issue_description', issueText);
+      if (obdCode) formData.append('obd_code', obdCode);
       if (imageFile) formData.append('image', imageFile);
       if (videoFile) formData.append('video', videoFile);
 
@@ -59,7 +60,7 @@ export default function Home() {
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl mx-auto">
           Select your vehicle, describe or film the issue — get instant root cause analysis
-          and step-by-step fix instructions. No ECU expertise needed.
+          and step-by-step fix instructions right in the workshop.
         </p>
 
         {/* Feature Pills */}

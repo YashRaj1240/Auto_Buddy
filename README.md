@@ -1,158 +1,123 @@
-# 🔧 MechAI — AI-Powered Automotive Fault Diagnosis
+# 🔧 MechAI — The Mechanic's Intelligent Workshop Co-Pilot
 
-> **Team TorqueIQ** · Google Cloud AI Builder Cup 2025 · Theme: Manufacturing
+> **Team TorqueIQ** · Google Cloud AI Builder Cup 2026 · Theme: Manufacturing
 
-[![Google Cloud](https://img.shields.io/badge/Google%20Cloud-Run-blue?logo=google-cloud)](https://cloud.google.com/run)
-[![Gemini](https://img.shields.io/badge/Gemini-1.5%20Pro-orange?logo=google)](https://deepmind.google/technologies/gemini/)
+[![Google Cloud](https://img.shields.io/badge/Google%20Cloud-Cloud%20Run%20%7C%20Firebase-blue?logo=google-cloud)](https://cloud.google.com/run)
+[![Gemini](https://img.shields.io/badge/Google%20AI-Gemini%203.8%20Flash-orange?logo=google)](https://deepmind.google/technologies/gemini/)
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/Frontend-React%20%7C%20Tailwind-61DAFB?logo=react)](https://react.dev/)
+[![PWA Ready](https://img.shields.io/badge/PWA-Installable-purple)](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
 ## 🚀 What is MechAI?
 
-MechAI is an AI-powered workshop co-pilot that helps **any technician** — even those with zero ECU knowledge — diagnose automotive faults instantly.
+**MechAI** is an AI-powered garage companion and workshop co-pilot created by **TorqueIQ**. Built for real-world automotive manufacturing and repair operations, MechAI empowers technicians, mechanics, and service advisors to diagnose vehicle faults with pinpoint accuracy in seconds.
 
-A technician can:
-1. **Select** their car (brand, model, year)
-2. **Describe** the issue via text or **voice**
-3. **Upload** a photo or **video** of the fault
-4. Get a complete **Root Cause Analysis** with step-by-step fix instructions in plain English
+### The Problem It Solves:
+- **The "Greasy Hands" Bottleneck**: In the shop, mechanics are covered in oil and grease under the hood. They cannot type on a keyboard or tap small screens. MechAI provides **true hands-free voice interaction** so mechanics can talk to their AI co-pilot without touching the screen.
+- **Raw Telemetry vs. Real Physical Symptoms**: An OBD-II diagnostic scanner outputs cryptic codes (e.g., `P0300` - Random Misfire), but cannot tell a technician *why* it's happening. MechAI fuses raw vehicle telemetry with multimodal inputs (voice descriptions, photos, and engine videos) to isolate the exact failing component.
+- **Instant Workshop Quotes**: Generates complete customer repair orders (RO) with required parts, pricing estimates, and labor hours instantly.
+
+---
+
+## ✨ Key Features
+
+- ⚡ **OBD-II / DTC Diagnostic Engine**: Cross-references standardized automotive fault codes (`P0300`, `P0420`, `P0171`, `P0455`, `P0128`) with engine telemetry and physical symptoms.
+- 🎙️ **Hands-Free Workshop Voice Assistant**: Continuous voice-activated loop designed for noisy, hands-busy garage environments.
+- 📋 **Automated Customer Job Sheet (RO)**: 1-click printable repair order featuring technical findings, parts breakdown table, estimated labor hours, and customer/technician sign-off blocks.
+- 🛠️ **Interactive Pre-Job Checklist**: Interactive tap-to-complete steps and tool checklist for pre-job prep.
+- 🎥 **Multimodal Video & Image Analysis**: Upload engine bay photos, gauge clusters, or videos of strange engine sounds analyzed directly by Gemini.
+- 📊 **Probabilistic Root Cause Breakdown**: Top 3 most probable root causes with confidence percentages and practical explanations.
+- 🛡️ **Driveability & Safety Advisory**: Real-time safety ratings (`SAFE`, `DRIVE WITH CAUTION`, `DO NOT DRIVE`) preventing catastrophic engine failure.
+- 📲 **Installable Progressive Web App (PWA)**: Works seamlessly across desktop, tablets, and mobile phones with native install support.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-[React Frontend] ──► [FastAPI Backend on Cloud Run]
-                          │
-                ┌─────────┼─────────────┐
-                ▼         ▼             ▼
-          [Gemini 1.5 Pro] [Firestore] [Cloud Storage]
-          (Multimodal AI)  (Sessions)  (Video/Images)
+┌─────────────────────────────────────────────────────────────┐
+│                       React 18 PWA                          │
+│     (Hands-Free Speech API · Tailwind CSS · Job Sheets)     │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTPS / JSON / Multipart
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    FastAPI Backend                          │
+│     (Async Python · Multimodal Ingestion · REST Endpoints)  │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                ┌──────────────┼──────────────┐
+                ▼              ▼              ▼
+     ┌──────────────────┐ ┌─────────┐ ┌─────────────┐
+     │  Google Gemini   │ │ Cloud   │ │ Cloud Run / │
+     │  3.8 Flash API   │ │ Storage │ │ Firebase    │
+     │  (Multimodal AI) │ │ (Media) │ │ (Hosting)   │
+     └──────────────────┘ └─────────┘ └─────────────┘
 ```
 
-### Tech Stack
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + Tailwind CSS |
-| Backend | FastAPI + Python 3.11 |
-| AI Model | Gemini 1.5 Pro (multimodal) |
-| Deployment | Google Cloud Run |
-| Database | Google Cloud Firestore |
-| Storage | Google Cloud Storage |
-
 ---
 
-## ✨ Key Features
-
-- 🎙️ **Voice Input** — Speak the issue, get instant transcription
-- 🎥 **Video Analysis** — Film the fault; Gemini analyzes it natively
-- 📸 **Image Upload** — Dashboard lights, engine bay photos
-- 🤖 **Multi-layer AI** — Root causes ranked by probability
-- 🔧 **Step-by-step fixes** — Written for non-experts
-- 💬 **Follow-up Chat** — Ask deeper questions after diagnosis
-- 📄 **PDF Report** — Download and share with workshop manager
-- 📱 **Mobile Responsive** — Works on any device in the field
-
----
-
-## ⚡ Quick Start (Local)
+## ⚡ Quick Start (Local Setup for Reviewers)
 
 ### Prerequisites
-- Python 3.11+
-- Node.js 20+
-- Google Cloud account
-- Gemini API key
+- Python 3.10+
+- Node.js 18+
+- Gemini API Key ([Google AI Studio](https://aistudio.google.com/app/apikey))
 
-### 1. Clone the repo
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/YashRaj1240/mechai.git
-cd mechai
+git clone https://github.com/YashRaj1240/Auto_Buddy.git
+cd Auto_Buddy
 ```
 
-### 2. Backend setup
+### 2. Backend Setup
 ```bash
 cd backend
-cp .env.example .env
-# Fill in GEMINI_API_KEY and GCP_PROJECT_ID in .env
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8080
-```
+# Create and activate a virtual environment (optional but recommended)
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
 
-### 3. Frontend setup
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
+echo GEMINI_API_KEY=your_gemini_api_key_here > .env
+
+# Run FastAPI backend
+python -m uvicorn main:app --reload --port 8080
+```
+Backend will be live at: `http://127.0.0.1:8080` (Docs: `http://127.0.0.1:8080/docs`)
+
+### 3. Frontend Setup
+In a new terminal window:
 ```bash
 cd frontend
 npm install
 npm start
 ```
-
-Open [http://localhost:3000](http://localhost:3000) 🎉
-
----
-
-## ☁️ Deploy to Google Cloud Run
-
-```bash
-# Make deploy script executable
-chmod +x deployment/deploy.sh
-
-# Edit PROJECT_ID in deploy.sh, then:
-./deployment/deploy.sh
-```
+Frontend will be live at: `http://localhost:3000`
 
 ---
 
-## 📁 Project Structure
+## 🧪 Quick Test Flow for Evaluators
 
-```
-mechai/
-├── backend/
-│   ├── main.py                    # FastAPI app entry point
-│   ├── routers/
-│   │   ├── diagnose.py            # Main diagnosis endpoint
-│   │   ├── chat.py                # Follow-up chat endpoint
-│   │   └── upload.py              # File upload endpoint
-│   ├── services/
-│   │   ├── gemini_service.py      # Gemini 1.5 Pro integration
-│   │   ├── firestore_service.py   # Firestore CRUD operations
-│   │   └── storage_service.py     # Google Cloud Storage
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── DiagnoseForm.jsx   # Car selector + input form
-│   │   │   ├── DiagnosisReport.jsx # Full RCA report UI
-│   │   │   └── Header.jsx
-│   │   ├── pages/
-│   │   │   ├── Home.jsx           # Main page
-│   │   │   ├── Report.jsx         # Saved report view
-│   │   │   └── History.jsx        # Diagnosis history
-│   │   └── App.jsx
-│   └── Dockerfile
-├── deployment/
-│   └── deploy.sh                  # One-click Cloud Run deploy
-├── docker-compose.yml
-└── README.md
-```
-
----
-
-## 🎯 Hackathon Theme Alignment
-
-**Theme: Manufacturing** — MechAI directly addresses:
-- ✅ **Quality Control**: AI-powered defect detection via visual + audio analysis
-- ✅ **Operational Efficiency**: Reduces diagnostic time from hours → minutes
-- ✅ **Knowledge Democratization**: Junior technicians get senior-engineer-level diagnosis
+1. Open `http://localhost:3000`.
+2. Select **Honda Civic 2020**.
+3. Under **Describe the Issue**, use the mic or type:
+   > *"Engine is sputtering, power loss under acceleration, check engine light blinking."*
+4. Select the **P0300** quick-select OBD-II pill.
+5. Click **"Diagnose Vehicle Fault"**.
+6. Inspect the **OBD-II Decoded Card**, tap the **Interactive Fix Steps** to complete them, and click **"Customer Job Sheet"** to preview the printable repair order!
+7. Activate the **Hands-Free Assistant** to converse directly with MechAI.
 
 ---
 
 ## 👥 Team TorqueIQ
-
-ECU engineers & AI builders. Real automotive software for global OEMs. Real Voice AI in production. One mission: give every mechanic the diagnostic power of a senior engineer, powered by Google Cloud & Gemini AI.
-
----
-
-## 📄 License
-
-MIT License — TorqueIQ © 2025
+Developed for the **Google Cloud AI Builder Cup 2026** (Manufacturing Theme).
+- **Yash Raj Choudhary** — Developer & Solution Architect

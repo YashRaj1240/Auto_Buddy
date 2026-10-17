@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from services.gemini_service import analyze_fault
 import uuid
 from datetime import datetime
+from typing import Optional
 
 router = APIRouter()
 
@@ -30,10 +31,11 @@ async def diagnose_fault(
     car_model: str = Form(...),
     car_year: int = Form(...),
     issue_description: str = Form(...),
+    obd_code: Optional[str] = Form(None),
     image: UploadFile = File(None),
     video: UploadFile = File(None)
 ):
-    """Main diagnosis endpoint. Accepts car info + issue + optional image/video."""
+    """Main diagnosis endpoint. Accepts car info + issue + optional OBD-II code + image/video."""
     try:
         session_id = str(uuid.uuid4())
 
@@ -47,6 +49,7 @@ async def diagnose_fault(
             car_model=car_model,
             car_year=car_year,
             issue_description=issue_description,
+            obd_code=obd_code,
             image_data=image_bytes,
             video_data=video_bytes,
             image_mime=image_mime,
