@@ -11,6 +11,13 @@
 
 ---
 
+### 🌐 Live Prototype & Deployment Links:
+- 🚀 **Live Web Application (Cloud Run)**: [https://mechai-305178984079.asia-south1.run.app](https://mechai-305178984079.asia-south1.run.app)
+- 📖 **Interactive API Documentation (Swagger)**: [https://mechai-305178984079.asia-south1.run.app/docs](https://mechai-305178984079.asia-south1.run.app/docs)
+- 💚 **Backend Health Status**: [https://mechai-305178984079.asia-south1.run.app/health](https://mechai-305178984079.asia-south1.run.app/health)
+
+---
+
 ## 🚀 What is MechAI?
 
 **MechAI** is an AI-powered garage companion and workshop co-pilot created by **TorqueIQ**. Built for real-world automotive manufacturing and repair operations, MechAI empowers technicians, mechanics, and service advisors to diagnose vehicle faults with pinpoint accuracy in seconds.
