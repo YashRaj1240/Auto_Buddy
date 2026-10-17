@@ -23,7 +23,9 @@ const YEARS = Array.from({ length: 25 }, (_, i) => 2025 - i);
 
 export default function DiagnoseForm({ onSubmit, loading, language = 'en' }) {
   const [carBrand, setCarBrand] = useState('');
+  const [customBrand, setCustomBrand] = useState('');
   const [carModel, setCarModel] = useState('');
+  const [customModel, setCustomModel] = useState('');
   const [carYear, setCarYear] = useState('');
   const [issueText, setIssueText] = useState('');
   const [obdCode, setObdCode] = useState('');
@@ -153,11 +155,14 @@ export default function DiagnoseForm({ onSubmit, loading, language = 'en' }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!carBrand || !carModel || !carYear || !issueText.trim()) {
-      toast.error('Please fill all required fields');
+    const finalBrand = carBrand === 'Other' ? customBrand.trim() : carBrand;
+    const finalModel = (carModel === 'Other' || carBrand === 'Other') ? customModel.trim() : carModel;
+
+    if (!finalBrand || !finalModel || !carYear || !issueText.trim()) {
+      toast.error(language === 'hi' ? 'कृपया सभी आवश्यक फ़ील्ड भरें' : 'Please fill all required fields');
       return;
     }
-    onSubmit({ carBrand, carModel, carYear: parseInt(carYear), issueText, obdCode, imageFile, videoFile });
+    onSubmit({ carBrand: finalBrand, carModel: finalModel, carYear: parseInt(carYear), issueText, obdCode, imageFile, videoFile });
   };
 
   return (
@@ -166,52 +171,108 @@ export default function DiagnoseForm({ onSubmit, loading, language = 'en' }) {
       <div className="glass-card p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <span className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-          Select Your Vehicle
+          {language === 'hi' ? 'अपनी गाड़ी चुनें' : 'Select Your Vehicle'}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Brand *</label>
+            <label className="block text-sm text-slate-400 mb-2">{language === 'hi' ? 'ब्रांड *' : 'Brand *'}</label>
             <select
               className="input-field"
               value={carBrand}
-              onChange={e => { setCarBrand(e.target.value); setCarModel(''); }}
+              onChange={e => {
+                const val = e.target.value;
+                setCarBrand(val);
+                if (val === 'Other') {
+                  setCarModel('Other');
+                } else {
+                  setCarModel('');
+                  setCustomBrand('');
+                  setCustomModel('');
+                }
+              }}
               required
             >
-              <option value="">Select Brand</option>
+              <option value="">{language === 'hi' ? 'ब्रांड चुनें' : 'Select Brand'}</option>
               {Object.keys(CAR_DATA).map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
+              <option value="Other">➕ {language === 'hi' ? 'अन्य ब्रांड (मैन्युअल दर्ज करें)' : 'Other (Enter Manually)'}</option>
             </select>
+            {carBrand === 'Other' && (
+              <input
+                type="text"
+                className="input-field mt-2 border-blue-500/60 focus:border-blue-400 bg-slate-900/80"
+                placeholder={language === 'hi' ? "ब्रांड का नाम लिखें (उदा. Skoda, Renault, Audi)" : "Enter brand name (e.g. Skoda, Renault, Audi)"}
+                value={customBrand}
+                onChange={e => setCustomBrand(e.target.value)}
+                required
+                autoFocus
+              />
+            )}
           </div>
+
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Model *</label>
-            <select
-              className="input-field"
-              value={carModel}
-              onChange={e => setCarModel(e.target.value)}
-              disabled={!carBrand}
-              required
-            >
-              <option value="">Select Model</option>
-              {carBrand && CAR_DATA[carBrand]?.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
+            <label className="block text-sm text-slate-400 mb-2">{language === 'hi' ? 'मॉडल *' : 'Model *'}</label>
+            {carBrand === 'Other' ? (
+              <input
+                type="text"
+                className="input-field border-blue-500/60 focus:border-blue-400 bg-slate-900/80"
+                placeholder={language === 'hi' ? "मॉडल का नाम लिखें (उदा. Kushaq, Duster, A4)" : "Enter model name (e.g. Kushaq, Duster, A4)"}
+                value={customModel}
+                onChange={e => setCustomModel(e.target.value)}
+                required
+              />
+            ) : (
+              <>
+                <select
+                  className="input-field"
+                  value={carModel}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCarModel(val);
+                    if (val !== 'Other') setCustomModel('');
+                  }}
+                  disabled={!carBrand}
+                  required
+                >
+                  <option value="">{language === 'hi' ? 'मॉडल चुनें' : 'Select Model'}</option>
+                  {carBrand && CAR_DATA[carBrand]?.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                  {carBrand && (
+                    <option value="Other">➕ {language === 'hi' ? 'अन्य मॉडल (मैन्युअल दर्ज करें)' : 'Other (Enter Manually)'}</option>
+                  )}
+                </select>
+                {carModel === 'Other' && (
+                  <input
+                    type="text"
+                    className="input-field mt-2 border-blue-500/60 focus:border-blue-400 bg-slate-900/80"
+                    placeholder={language === 'hi' ? "मॉडल का नाम लिखें (उदा. Slavia, Kiger)" : "Enter model name (e.g. Slavia, Kiger)"}
+                    value={customModel}
+                    onChange={e => setCustomModel(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                )}
+              </>
+            )}
           </div>
+
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Year *</label>
+            <label className="block text-sm text-slate-400 mb-2">{language === 'hi' ? 'वर्ष *' : 'Year *'}</label>
             <select
               className="input-field"
               value={carYear}
               onChange={e => setCarYear(e.target.value)}
               required
             >
-              <option value="">Select Year</option>
+              <option value="">{language === 'hi' ? 'वर्ष चुनें' : 'Select Year'}</option>
               {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
         </div>
       </div>
+
 
       {/* Issue Description */}
       <div className="glass-card p-6">
