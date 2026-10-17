@@ -167,9 +167,17 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     return recognition;
   };
 
-  const speakText = (text) => {
+  const speakText = (text, isClosing = false) => {
     if (!window.speechSynthesis) {
       console.warn('Speech synthesis not supported on this device');
+      if (isClosing) {
+        setVoiceModeActive(false);
+        window.isVoiceModeIntentionallyActive = false;
+        setIsListening(false);
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch(e) {}
+        }
+      }
       return;
     }
     
@@ -185,7 +193,17 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         .replace(/\s+/g, ' ')
         .trim();
 
-      if (!cleanText) return;
+      if (!cleanText) {
+        if (isClosing) {
+          setVoiceModeActive(false);
+          window.isVoiceModeIntentionallyActive = false;
+          setIsListening(false);
+          if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
+          }
+        }
+        return;
+      }
 
       // Ensure feminine grammar in Hindi if masculine pronouns appear
       if (language === 'hi' || /[\u0900-\u097F]/.test(cleanText)) {
@@ -217,6 +235,16 @@ export default function DiagnosisReport({ data, language = 'en' }) {
 
       utterance.onend = () => {
         setIsSpeaking(false);
+        if (isClosing) {
+          setVoiceModeActive(false);
+          window.isVoiceModeIntentionallyActive = false;
+          setIsListening(false);
+          if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
+          }
+          toast.success(language === 'hi' ? 'बातचीत समाप्त। सुरक्षित यात्रा करें!' : 'Conversation concluded. Voice assistant closed.');
+          return;
+        }
         // AI finished speaking, restart listening if we're in voice mode
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
@@ -228,6 +256,15 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       utterance.onerror = (e) => {
         setIsSpeaking(false);
         console.warn('Speech synthesis error:', e);
+        if (isClosing) {
+          setVoiceModeActive(false);
+          window.isVoiceModeIntentionallyActive = false;
+          setIsListening(false);
+          if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(err) {}
+          }
+          return;
+        }
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(err) {}
@@ -241,12 +278,28 @@ export default function DiagnosisReport({ data, language = 'en' }) {
           window.speechSynthesis.speak(utterance);
         } catch(e) {
           console.error('speak error:', e);
+          if (isClosing) {
+            setVoiceModeActive(false);
+            window.isVoiceModeIntentionallyActive = false;
+            setIsListening(false);
+            if (recognitionRef.current) {
+              try { recognitionRef.current.stop(); } catch(err) {}
+            }
+          }
         }
       }, 80);
 
     } catch (err) {
       setIsSpeaking(false);
       console.error('speakText error:', err);
+      if (isClosing) {
+        setVoiceModeActive(false);
+        window.isVoiceModeIntentionallyActive = false;
+        setIsListening(false);
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch(err) {}
+        }
+      }
     }
   };
 
@@ -285,9 +338,43 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     if (!messageText.trim()) return;
     setChatInput('');
     setChatMessages(prev => [...prev, { role: 'user', text: messageText }]);
-    setChatLoading(true);
 
     const isVoice = voiceModeActive || voiceModeRef.current || window.isVoiceModeIntentionallyActive;
+
+    // Detect if customer is saying thank you, goodbye, or concluding the conversation
+    const normalizedText = messageText.trim().toLowerCase().replace(/[.,!?;:'"-]/g, ' ').replace(/\s+/g, ' ');
+    const closingPatterns = [
+      /\b(thank\s*you|thanks|thanku|thx)\b/i,
+      /\b(good\s*bye|bye\s*bye|bye)\b/i,
+      /\b(dhanyawad|dhanyavaad|shukriya|shukriyaa)\b/i,
+      /(धन्यवाद|शुक्रिया|अलविदा)/i,
+      /\b(that'?s all|done for now|we'?re done|stop conversation|close conversation|wrap up)\b/i,
+      /\b(bas itna hi|khatam|bas ho gaya|itna kafi hai)\b/i
+    ];
+    const isQuestion = /\b(what|how|why|when|where|which|who|can you|could you|tell me|kya|kaise|kab|kahan|kyun|batao|bataiye)\b/i.test(normalizedText);
+    const matchesClosing = closingPatterns.some(p => p.test(normalizedText));
+    const isClosingIntent = matchesClosing && (!isQuestion || normalizedText.length <= 50);
+
+    if (isClosingIntent) {
+      const isHindi = language === 'hi' || /[\u0900-\u097F]/.test(messageText) || /(dhanyawad|shukriya)/i.test(normalizedText);
+      const farewellReply = isHindi
+        ? "आपका बहुत-बहुत स्वागत है! अगर आगे कोई भी सवाल हो तो मैं हमेशा यहाँ हूँ। सुरक्षित ड्राइविंग करें, धन्यवाद!"
+        : "You are very welcome! If you ever need help again, I am always here. Drive safe and have a great day!";
+
+      setChatMessages(prev => [...prev, { role: 'ai', text: farewellReply }]);
+
+      if (isVoice) {
+        // Stop speech recognition immediately to prevent feedback loop
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch(e) {}
+        }
+        setIsListening(false);
+        speakText(farewellReply, true);
+      }
+      return;
+    }
+
+    setChatLoading(true);
 
     try {
       const res = await axios.post(`${API_BASE}/chat/`, {
@@ -299,7 +386,9 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
       
       if (isVoice) {
-        speakText(aiResponse);
+        const aiIsClosing = /(drive safe|safe journey|take care|अलविदा|सुरक्षित ड्राइविंग)/i.test(aiResponse) &&
+          /(welcome|glad to help|happy to help|स्वागत|धन्यवाद)/i.test(aiResponse);
+        speakText(aiResponse, aiIsClosing);
       }
     } catch (error) {
       const errorMsg = error.response?.data?.detail || '';
