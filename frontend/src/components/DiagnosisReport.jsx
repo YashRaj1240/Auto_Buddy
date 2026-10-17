@@ -12,7 +12,7 @@ import jsPDF from 'jspdf';
 
 const API_BASE = process.env.REACT_APP_API_URL || '/api';
 
-export default function DiagnosisReport({ data }) {
+export default function DiagnosisReport({ data, language = 'en' }) {
   const { session_id, car_info, issue, diagnosis } = data;
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -56,7 +56,7 @@ export default function DiagnosisReport({ data }) {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.lang = 'en-US';
+    recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
     recognition.onstart = () => setIsListening(true);
     
@@ -109,13 +109,18 @@ export default function DiagnosisReport({ data }) {
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
-      utterance.lang = 'en-US';
+      utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
-      // Pick a natural English voice if available
+      // Pick an appropriate voice based on language
       const voices = window.speechSynthesis.getVoices();
       if (voices && voices.length > 0) {
-        const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('David')));
-        if (preferredVoice) utterance.voice = preferredVoice;
+        if (language === 'hi') {
+          const hindiVoice = voices.find(v => v.lang.startsWith('hi') || v.name.toLowerCase().includes('hindi') || v.lang === 'hi_IN');
+          if (hindiVoice) utterance.voice = hindiVoice;
+        } else {
+          const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('David')));
+          if (preferredVoice) utterance.voice = preferredVoice;
+        }
       }
 
       utterance.onend = () => {
@@ -151,7 +156,7 @@ export default function DiagnosisReport({ data }) {
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch(e) {}
       }
-      toast.success('Voice Assistant deactivated');
+      toast.success(language === 'hi' ? 'वॉइस असिस्टेंट बंद कर दिया गया' : 'Voice Assistant deactivated');
     } else {
       if (!recognitionRef.current) {
         recognitionRef.current = initSpeechRecognition();
@@ -163,8 +168,11 @@ export default function DiagnosisReport({ data }) {
       setVoiceModeActive(true);
       window.isVoiceModeIntentionallyActive = true;
       setChatOpen(true);
-      speakText(`Voice assistant activated. I'm ready to answer questions about the ${car_info.model}.`);
-      toast.success('Voice Assistant Mode ON');
+      const welcomeMsg = language === 'hi'
+        ? `वॉइस असिस्टेंट चालू हो गया है। मैं ${car_info.model} के बारे में आपके सवालों के जवाब देने के लिए तैयार हूँ।`
+        : `Voice assistant activated. I'm ready to answer questions about the ${car_info.model}.`;
+      speakText(welcomeMsg);
+      toast.success(language === 'hi' ? 'वॉइस असिस्टेंट मोड चालू है' : 'Voice Assistant Mode ON');
     }
   };
 
@@ -179,7 +187,8 @@ export default function DiagnosisReport({ data }) {
     try {
       const res = await axios.post(`${API_BASE}/chat/`, {
         session_id,
-        message: messageText
+        message: messageText,
+        language
       });
       const aiResponse = res.data.response;
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);

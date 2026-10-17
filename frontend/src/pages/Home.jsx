@@ -7,7 +7,7 @@ import { FaWrench, FaRobot, FaVideo } from 'react-icons/fa';
 
 const API_BASE = process.env.REACT_APP_API_URL || '/api';
 
-export default function Home() {
+export default function Home({ language = 'en' }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -21,6 +21,7 @@ export default function Home() {
       formData.append('car_model', carModel);
       formData.append('car_year', carYear);
       formData.append('issue_description', issueText);
+      formData.append('language', language);
       if (obdCode) formData.append('obd_code', obdCode);
       if (imageFile) formData.append('image', imageFile);
       if (videoFile) formData.append('video', videoFile);
@@ -31,14 +32,14 @@ export default function Home() {
       });
 
       setResult(response.data);
-      toast.success('Diagnosis complete!');
+      toast.success(language === 'hi' ? 'जांच पूरी हो गई!' : 'Diagnosis complete!');
 
       setTimeout(() => {
         document.getElementById('report-section')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
 
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Diagnosis failed. Check your API key and try again.';
+      const msg = err.response?.data?.detail || (language === 'hi' ? 'जांच में त्रुटि हुई। कृपया पुनः प्रयास करें।' : 'Diagnosis failed. Check your API key and try again.');
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -52,23 +53,24 @@ export default function Home() {
         <div className="inline-flex items-center gap-2 bg-blue-600/20 border border-blue-500/30
                         text-blue-400 text-sm px-4 py-2 rounded-full mb-4">
           <FaRobot size={14} />
-          Powered by Gemini 1.5 Pro · Google Cloud
+          Powered by Gemini 3.8 Flash · Google Cloud
         </div>
         <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">
-          Your AI Workshop<br />
-          <span className="text-blue-400">Co-Pilot</span>
+          {language === 'hi' ? 'आपका स्मार्ट गैरेज' : 'Your AI Workshop'}<br />
+          <span className="text-blue-400">{language === 'hi' ? 'को-पायलट' : 'Co-Pilot'}</span>
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          Select your vehicle, describe or film the issue — get instant root cause analysis
-          and step-by-step fix instructions right in the workshop.
+          {language === 'hi'
+            ? 'अपनी गाड़ी चुनें, परेशानी बोलकर या लिखकर बताएं — सेकंडों में पाएं रूट कॉज़ एनालिसिस और रिपेयर के स्टेप्स।'
+            : 'Select your vehicle, describe or film the issue — get instant root cause analysis and step-by-step fix instructions right in the workshop.'}
         </p>
 
         {/* Feature Pills */}
         <div className="flex flex-wrap justify-center gap-3 mt-6">
           {[
-            { icon: <FaWrench size={12} />, text: 'Root Cause Analysis' },
-            { icon: <FaVideo size={12} />, text: 'Video Analysis' },
-            { icon: <FaRobot size={12} />, text: 'AI-Powered Diagnosis' },
+            { icon: <FaWrench size={12} />, text: language === 'hi' ? 'रूट कॉज़ एनालिसिस' : 'Root Cause Analysis' },
+            { icon: <FaVideo size={12} />, text: language === 'hi' ? 'वीडियो डायग्नोसिस' : 'Video Analysis' },
+            { icon: <FaRobot size={12} />, text: language === 'hi' ? 'एआई को-पायलट' : 'AI-Powered Diagnosis' },
           ].map((f, i) => (
             <div key={i} className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/50
                                     px-3 py-1.5 rounded-full text-slate-300 text-sm">
@@ -80,12 +82,12 @@ export default function Home() {
       </div>
 
       {/* Form */}
-      <DiagnoseForm onSubmit={handleSubmit} loading={loading} />
+      <DiagnoseForm onSubmit={handleSubmit} loading={loading} language={language} />
 
       {/* Report */}
       {result && (
         <div id="report-section">
-          <DiagnosisReport data={result} />
+          <DiagnosisReport data={result} language={language} />
         </div>
       )}
     </div>

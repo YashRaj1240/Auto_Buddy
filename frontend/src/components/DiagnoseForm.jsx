@@ -21,7 +21,7 @@ const CAR_DATA = {
 
 const YEARS = Array.from({ length: 25 }, (_, i) => 2025 - i);
 
-export default function DiagnoseForm({ onSubmit, loading }) {
+export default function DiagnoseForm({ onSubmit, loading, language = 'en' }) {
   const [carBrand, setCarBrand] = useState('');
   const [carModel, setCarModel] = useState('');
   const [carYear, setCarYear] = useState('');
@@ -105,7 +105,7 @@ export default function DiagnoseForm({ onSubmit, loading }) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = false;
-      recognition.lang = 'en-US';
+      recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
       // Keep track of what was already in the box before we started speaking
       let baseText = document.getElementById('issue-textarea')?.value || issueText || '';
@@ -217,13 +217,17 @@ export default function DiagnoseForm({ onSubmit, loading }) {
       <div className="glass-card p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <span className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-          Describe the Issue
+          {language === 'hi' ? 'गाड़ी की परेशानी बताएं' : 'Describe the Issue'}
         </h2>
         <div className="relative">
           <textarea
             id="issue-textarea"
             className="input-field min-h-[120px] resize-none pr-14"
-            placeholder="Describe what's happening in plain English... e.g. 'Car won't start, clicking sound when turning key, dashboard battery light is on'"
+            placeholder={
+              language === 'hi'
+                ? "गाड़ी में क्या खराबी आ रही है, बोलकर या लिखकर बताएं... जैसे: 'गाड़ी स्टार्ट नहीं हो रही, चाबी घुमाने पर टिक-टिक आवाज़ आ रही है, ब्रेक लगाने पर आवाज़ आ रही है'"
+                : "Describe what's happening in plain English... e.g. 'Car won't start, clicking sound when turning key, dashboard battery light is on'"
+            }
             value={issueText}
             onChange={e => setIssueText(e.target.value)}
             required
@@ -370,12 +374,12 @@ export default function DiagnoseForm({ onSubmit, loading }) {
         {loading ? (
           <>
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            AI is analyzing your vehicle...
+            {language === 'hi' ? 'एआई आपकी गाड़ी की जांच कर रहा है...' : 'AI is analyzing your vehicle...'}
           </>
         ) : (
           <>
             <MdUpload size={20} />
-            Run AI Diagnosis
+            {language === 'hi' ? 'गाड़ी की जांच करें (Diagnose)' : 'Run AI Diagnosis'}
           </>
         )}
       </button>

@@ -5,6 +5,7 @@ __pycache__/
 node_modules/
 build/
 dist/
+backend/static/
 .DS_Store
 *.log
 .env.local

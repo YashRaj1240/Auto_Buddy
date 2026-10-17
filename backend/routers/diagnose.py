@@ -32,10 +32,11 @@ async def diagnose_fault(
     car_year: int = Form(...),
     issue_description: str = Form(...),
     obd_code: Optional[str] = Form(None),
+    language: Optional[str] = Form("en"),
     image: UploadFile = File(None),
     video: UploadFile = File(None)
 ):
-    """Main diagnosis endpoint. Accepts car info + issue + optional OBD-II code + image/video."""
+    """Main diagnosis endpoint. Accepts car info + issue + optional OBD-II code + language + image/video."""
     try:
         session_id = str(uuid.uuid4())
 
@@ -50,6 +51,7 @@ async def diagnose_fault(
             car_year=car_year,
             issue_description=issue_description,
             obd_code=obd_code,
+            language=language or "en",
             image_data=image_bytes,
             video_data=video_bytes,
             image_mime=image_mime,

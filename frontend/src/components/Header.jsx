@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { FaWrench, FaHistory, FaDownload } from 'react-icons/fa';
 import { MdDashboard } from 'react-icons/md';
 
-export default function Header() {
+export default function Header({ language = 'en', onLanguageChange = () => {} }) {
   const location = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
@@ -67,6 +67,34 @@ export default function Header() {
             </button>
           )}
           
+          {/* Language Switcher */}
+          <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-lg p-0.5 text-xs mr-1 sm:mr-2 shadow-inner">
+            <button
+              type="button"
+              onClick={() => onLanguageChange('en')}
+              className={`px-2.5 py-1 rounded-md transition-all font-semibold ${
+                language === 'en'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to English"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => onLanguageChange('hi')}
+              className={`px-2.5 py-1 rounded-md transition-all font-semibold ${
+                language === 'hi'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="हिंदी में बदलें (Switch to Hindi)"
+            >
+              🇮🇳 हिंदी
+            </button>
+          </div>
+
           <Link
             to="/"
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all

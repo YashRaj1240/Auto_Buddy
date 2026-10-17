@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from services.gemini_service import chat_followup
 
 router = APIRouter()
@@ -10,6 +11,7 @@ _local_chat_store = {}
 class ChatMessage(BaseModel):
     session_id: str
     message: str
+    language: Optional[str] = "en"
 
 async def try_get_diagnosis(session_id):
     try:
@@ -54,7 +56,7 @@ async def send_chat_message(payload: ChatMessage):
         await try_save_chat_message(payload.session_id, "user", payload.message)
         
         # Note: Chat uses same model but needs to clear the strict JSON generation_config for normal chat
-        response_text = await chat_followup(history, payload.message)
+        response_text = await chat_followup(history, payload.message, language=payload.language or "en")
 
         await try_save_chat_message(payload.session_id, "model", response_text)
 

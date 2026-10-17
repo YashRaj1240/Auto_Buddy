@@ -61,6 +61,7 @@ async def analyze_fault(
     car_year: int,
     issue_description: str,
     obd_code: Optional[str] = None,
+    language: str = "en",
     image_data: Optional[bytes] = None,
     video_data: Optional[bytes] = None,
     image_mime: str = "image/jpeg",
@@ -68,7 +69,7 @@ async def analyze_fault(
 ) -> dict:
     """
     Core multimodal analysis function using Gemini.
-    Accepts text description + optional image/video.
+    Accepts text description + optional image/video + language preference.
     """
     prompt_text = f"""
     VEHICLE INFORMATION:
@@ -82,7 +83,14 @@ async def analyze_fault(
     if obd_code:
         prompt_text += f"\n    OBD-II / DTC FAULT CODE:\n    {obd_code}\n"
         prompt_text += "\n    Correlate this specific OBD-II code with the reported symptoms and explain the failure mechanism in detail."
-    
+
+    if language in ["hi", "hindi"]:
+        prompt_text += """
+    LANGUAGE INSTRUCTION (MANDATORY):
+    The technician requested HINDI. 
+    Provide all explanations, summary, root cause explanations, fix step actions, and safety warnings in natural, clear, workshop-friendly HINDI (Devanagari script) so a Hindi-speaking Indian mechanic can easily follow it. You can keep technical part names (e.g., Spark Plug, Fuel Injector, Brake Rotor, Sensor) in English or common garage vocabulary, but explain all steps and diagnoses in Hindi!
+    """
+
     prompt_text += """
     Please analyze this automotive fault and provide a complete diagnosis.
     Provide clear, practical, and actionable workshop instructions for the technician.
@@ -113,16 +121,16 @@ async def analyze_fault(
 
 # Chat model without the strict JSON requirement
 chat_model = genai.GenerativeModel(
-    model_name="gemini-3.5-flash",
-    system_instruction="You are MechAI, a helpful automotive diagnostic assistant. The user is asking follow-up questions about a diagnosis. Answer in plain, helpful English. Keep responses short and directly address the user's question.",
+    model_name="gemini-3.8-flash",
+    system_instruction="You are MechAI, a friendly and experienced automotive workshop co-pilot created by TorqueIQ. The user is asking follow-up questions about a diagnosis. Answer clearly, practically, and concisely.",
     generation_config={
         "temperature": 0.3,
         "top_p": 0.8,
     }
 )
 
-async def chat_followup(conversation_history: list, new_message: str) -> str:
-    """Handle follow-up chat questions after initial diagnosis."""
+async def chat_followup(conversation_history: list, new_message: str, language: str = "en") -> str:
+    """Handle follow-up chat questions after initial diagnosis with language support."""
     formatted_history = []
     for msg in conversation_history:
         formatted_history.append({
@@ -131,5 +139,10 @@ async def chat_followup(conversation_history: list, new_message: str) -> str:
         })
 
     chat = chat_model.start_chat(history=formatted_history)
-    response = chat.send_message(new_message)
+    
+    msg_to_send = new_message
+    if language in ["hi", "hindi"]:
+        msg_to_send += "\n[IMPORTANT: Please respond in clear, natural Hindi so the workshop mechanic can understand easily.]"
+
+    response = chat.send_message(msg_to_send)
     return response.text
