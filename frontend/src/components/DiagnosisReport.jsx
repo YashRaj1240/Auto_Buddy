@@ -26,17 +26,10 @@ export default function DiagnosisReport({ data, language = 'en' }) {
   const [availableVoices, setAvailableVoices] = useState([]);
   const recognitionRef = useRef(null);
   const voiceModeRef = useRef(false);
-  const isSpeakingRef = useRef(false);
-  const speechWatchdogRef = useRef(null);
-  const restartTimerRef = useRef(null);
 
   useEffect(() => {
     voiceModeRef.current = voiceModeActive;
   }, [voiceModeActive]);
-
-  useEffect(() => {
-    isSpeakingRef.current = isSpeaking;
-  }, [isSpeaking]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -135,73 +128,16 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     }
   };
 
-  const startRecognitionSafely = () => {
-    if (!voiceModeRef.current || isSpeakingRef.current) return;
-    
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
-
-    if (!recognitionRef.current) {
-      recognitionRef.current = initSpeechRecognition();
-    }
-    if (!recognitionRef.current) return;
-
-    try {
-      recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-US';
-      recognitionRef.current.abort(); // Clear any hung recognition session
-    } catch(e) {}
-
-    setTimeout(() => {
-      if (voiceModeRef.current && !isSpeakingRef.current && recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-          setIsListening(true);
-        } catch(err) {
-          if (!err.message?.includes('already started')) {
-            console.warn('Speech recognition start note:', err);
-          }
-        }
-      }
-    }, 120);
-  };
-
-  const scheduleRecognitionRestart = (delayMs = 250) => {
-    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-    restartTimerRef.current = setTimeout(() => {
-      startRecognitionSafely();
-    }, delayMs);
-  };
-
   const initSpeechRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
     
     const recognition = new SpeechRecognition();
-    recognition.continuous = false; // False is far more stable on Desktop Chrome / Windows
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onerror = (event) => {
-      console.warn('SpeechRecognition error:', event.error);
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        toast.error(
-          language === 'hi'
-            ? 'माइक्रोफ़ोन की अनुमति नहीं है। कृपया ब्राउज़र में माइक्रोफ़ोन की अनुमति दें।'
-            : 'Microphone permission blocked. Please allow microphone access in your browser address bar.'
-        );
-        setVoiceModeActive(false);
-        window.isVoiceModeIntentionallyActive = false;
-        setIsListening(false);
-        return;
-      }
-      // 'no-speech' happens naturally on desktop when user pauses — onend will cleanly restart
-    };
+    recognition.onstart = () => setIsListening(true);
     
     recognition.onresult = (event) => {
       let finalTranscript = '';
@@ -210,24 +146,21 @@ export default function DiagnosisReport({ data, language = 'en' }) {
           finalTranscript += event.results[i][0].transcript;
         }
       }
-      if (!finalTranscript && event.results[0] && event.results[0][0]) {
-        finalTranscript = event.results[0][0].transcript;
-      }
       
       if (finalTranscript.trim()) {
         setChatInput(finalTranscript);
         playChime(); // Instant audio cue!
-        try { recognition.abort(); } catch(e) {}
-        setIsListening(false);
-        triggerSend(finalTranscript); // Immediate trigger
+        try { recognition.stop(); } catch(e) {}
+        triggerSend(finalTranscript); // Immediate trigger without 200ms lag
       }
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      // Restart listening if voice mode is still active and AI is not speaking
-      if (voiceModeRef.current && !isSpeakingRef.current) {
-        scheduleRecognitionRestart(200);
+      if (window.isVoiceModeIntentionallyActive && !window.speechSynthesis.speaking) {
+        setTimeout(() => {
+          try { recognition.start(); } catch(e) {}
+        }, 100);
       }
     };
     
@@ -242,28 +175,13 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         window.isVoiceModeIntentionallyActive = false;
         setIsListening(false);
         if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch(e) {}
+          try { recognitionRef.current.stop(); } catch(e) {}
         }
       }
       return;
     }
     
     try {
-      if (restartTimerRef.current) {
-        clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = null;
-      }
-      if (speechWatchdogRef.current) {
-        clearTimeout(speechWatchdogRef.current);
-        speechWatchdogRef.current = null;
-      }
-
-      // Stop recognition while speaking so laptop speakers don't loop into mic
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch(e) {}
-      }
-      setIsListening(false);
-
       if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
         window.speechSynthesis.cancel();
       }
@@ -281,7 +199,7 @@ export default function DiagnosisReport({ data, language = 'en' }) {
           window.isVoiceModeIntentionallyActive = false;
           setIsListening(false);
           if (recognitionRef.current) {
-            try { recognitionRef.current.abort(); } catch(e) {}
+            try { recognitionRef.current.stop(); } catch(e) {}
           }
         }
         return;
@@ -301,10 +219,7 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       const targetLang = hasDevanagari ? 'hi' : 'en';
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      // Retain global reference to prevent Chrome V8 garbage collection dropping onend/onerror
-      window.__activeUtterance = utterance;
-
-      utterance.rate = 0.95; // Steady tempo prevents audio jitter
+      utterance.rate = 0.95; // Steady, calm tempo prevents audio jitter and packet loss on Windows
       utterance.pitch = 1.0;
       utterance.lang = targetLang === 'hi' ? 'hi-IN' : 'en-US';
 
@@ -314,55 +229,48 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         utterance.voice = bestVoice;
       }
 
-      const handleSpeechDone = () => {
-        if (speechWatchdogRef.current) {
-          clearTimeout(speechWatchdogRef.current);
-          speechWatchdogRef.current = null;
-        }
-        window.__activeUtterance = null;
-        isSpeakingRef.current = false;
-        setIsSpeaking(false);
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+      };
 
+      utterance.onend = () => {
+        setIsSpeaking(false);
         if (isClosing) {
           setVoiceModeActive(false);
           window.isVoiceModeIntentionallyActive = false;
           setIsListening(false);
           if (recognitionRef.current) {
-            try { recognitionRef.current.abort(); } catch(e) {}
+            try { recognitionRef.current.stop(); } catch(e) {}
           }
           toast.success(language === 'hi' ? 'बातचीत समाप्त। सुरक्षित यात्रा करें!' : 'Conversation concluded. Voice assistant closed.');
           return;
         }
-
-        // AI finished speaking, resume listening cleanly
-        if (voiceModeRef.current) {
-          startRecognitionSafely();
+        // AI finished speaking, restart listening if we're in voice mode
+        if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
+          setTimeout(() => {
+            try { recognitionRef.current.start(); } catch(e) {}
+          }, 350);
         }
-      };
-
-      utterance.onstart = () => {
-        isSpeakingRef.current = true;
-        setIsSpeaking(true);
-      };
-
-      utterance.onend = () => {
-        handleSpeechDone();
       };
 
       utterance.onerror = (e) => {
-        console.warn('Speech synthesis error/interrupted:', e);
-        handleSpeechDone();
-      };
-
-      // Watchdog timer: If Chromium fails to fire onend (a famous Windows Chrome bug), auto-recover!
-      const wordCount = cleanText.split(' ').length;
-      const estimatedDurationMs = Math.max(3500, wordCount * 500 + 2000);
-      speechWatchdogRef.current = setTimeout(() => {
-        if (isSpeakingRef.current) {
-          console.warn('Speech synthesis watchdog triggered recovery');
-          handleSpeechDone();
+        setIsSpeaking(false);
+        console.warn('Speech synthesis error:', e);
+        if (isClosing) {
+          setVoiceModeActive(false);
+          window.isVoiceModeIntentionallyActive = false;
+          setIsListening(false);
+          if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(err) {}
+          }
+          return;
         }
-      }, estimatedDurationMs);
+        if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
+          setTimeout(() => {
+            try { recognitionRef.current.start(); } catch(err) {}
+          }, 350);
+        }
+      };
 
       // 80ms gap allows Windows audio sink to initialize cleanly without buffer clipping
       setTimeout(() => {
@@ -370,68 +278,51 @@ export default function DiagnosisReport({ data, language = 'en' }) {
           window.speechSynthesis.speak(utterance);
         } catch(e) {
           console.error('speak error:', e);
-          handleSpeechDone();
+          if (isClosing) {
+            setVoiceModeActive(false);
+            window.isVoiceModeIntentionallyActive = false;
+            setIsListening(false);
+            if (recognitionRef.current) {
+              try { recognitionRef.current.stop(); } catch(err) {}
+            }
+          }
         }
       }, 80);
 
     } catch (err) {
-      isSpeakingRef.current = false;
       setIsSpeaking(false);
-      window.__activeUtterance = null;
       console.error('speakText error:', err);
       if (isClosing) {
         setVoiceModeActive(false);
         window.isVoiceModeIntentionallyActive = false;
         setIsListening(false);
         if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch(err) {}
+          try { recognitionRef.current.stop(); } catch(err) {}
         }
       }
     }
   };
 
-  const toggleVoiceMode = async () => {
+
+  const toggleVoiceMode = () => {
     if (voiceModeActive) {
       setVoiceModeActive(false);
       window.isVoiceModeIntentionallyActive = false;
-      isSpeakingRef.current = false;
       setIsListening(false);
       setIsSpeaking(false);
-      window.__activeUtterance = null;
-      if (speechWatchdogRef.current) clearTimeout(speechWatchdogRef.current);
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
       window.speechSynthesis.cancel();
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch(e) {}
+        try { recognitionRef.current.stop(); } catch(e) {}
       }
       toast.success(language === 'hi' ? 'वॉइस असिस्टेंट बंद कर दिया गया' : 'Voice Assistant deactivated');
     } else {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        toast.error("Your browser doesn't support Voice Assistant (Please use Google Chrome or Edge)");
-        return;
-      }
-
-      // Explicitly check/request microphone permission on laptop
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach(track => track.stop());
-        } catch (permErr) {
-          console.warn('Microphone permission check:', permErr);
-          toast.error(
-            language === 'hi'
-              ? 'कृपया ब्राउज़र में माइक्रोफ़ोन की अनुमति (Permission) दें'
-              : 'Please allow microphone access in your browser to use voice'
-          );
-          return;
-        }
-      }
-
       if (!recognitionRef.current) {
         recognitionRef.current = initSpeechRecognition();
       }
-
+      if (!recognitionRef.current) {
+        toast.error("Your browser doesn't support Voice Assistant");
+        return;
+      }
       setVoiceModeActive(true);
       window.isVoiceModeIntentionallyActive = true;
       setChatOpen(true);
@@ -473,8 +364,9 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       setChatMessages(prev => [...prev, { role: 'ai', text: farewellReply }]);
 
       if (isVoice) {
+        // Stop speech recognition immediately to prevent feedback loop
         if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch(e) {}
+          try { recognitionRef.current.stop(); } catch(e) {}
         }
         setIsListening(false);
         speakText(farewellReply, true);
@@ -553,15 +445,12 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     toast.success('PDF downloaded!');
   };
 
-  // Clean up speech synthesis and timers when component unmounts
+  // Clean up speech synthesis when component unmounts
   useEffect(() => {
     return () => {
-      if (speechWatchdogRef.current) clearTimeout(speechWatchdogRef.current);
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-      window.__activeUtterance = null;
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      window.speechSynthesis.cancel();
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch(e) {}
+        try { recognitionRef.current.stop(); } catch(e) {}
       }
     };
   }, []);
@@ -832,41 +721,21 @@ export default function DiagnosisReport({ data, language = 'en' }) {
             <div className="flex gap-2 relative">
               <input
                 className="input-field"
-                placeholder={
-                  voiceModeActive
-                    ? (isSpeaking
-                        ? (language === 'hi' ? "🔊 AI बोल रही है..." : "🔊 AI is speaking...")
-                        : isListening
-                        ? (language === 'hi' ? "🎙️ सुन रही हूँ... अपना सवाल बोलें" : "🎙️ Listening... Speak your question now")
-                        : (language === 'hi' ? "माइक पर क्लिक करें या बोलें..." : "Click mic or speak to continue..."))
-                    : (language === 'hi' ? "उदा: इसे ठीक करने में कितना खर्च आएगा?" : "e.g. How much will this cost to fix?")
-                }
+                placeholder={voiceModeActive ? (isListening ? "Listening..." : "Wait for AI to finish speaking...") : "e.g. How much will this cost to fix?"}
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && triggerSend(chatInput)}
+                disabled={voiceModeActive}
               />
-              {voiceModeActive ? (
-                <button
-                  type="button"
-                  onClick={startRecognitionSafely}
-                  title={isListening ? "Listening active (tap to refresh)" : "Tap to speak"}
-                  className={`px-4 rounded-xl flex items-center justify-center transition-all ${
-                    isListening 
-                      ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-600/30 ring-2 ring-rose-400' 
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
-                  }`}
-                >
-                  <FaMicrophone size={18} />
-                </button>
-              ) : (
-                <button 
-                  onClick={() => triggerSend(chatInput)} 
-                  className="px-4 rounded-xl flex items-center justify-center transition-colors bg-blue-600 hover:bg-blue-500 text-white"
-                  disabled={chatLoading}
-                >
-                  <MdSend size={18} />
-                </button>
-              )}
+              <button 
+                onClick={() => triggerSend(chatInput)} 
+                className={`px-4 rounded-xl flex items-center justify-center transition-colors ${
+                  voiceModeActive ? 'bg-slate-700 text-slate-500' : 'bg-blue-600 hover:bg-blue-500 text-white'
+                }`}
+                disabled={chatLoading || voiceModeActive}
+              >
+                <MdSend size={18} />
+              </button>
             </div>
           </div>
         )}
