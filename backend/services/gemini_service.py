@@ -119,20 +119,28 @@ async def analyze_fault(
         return {"raw_response": response.text, "parse_error": True}
 
 
-# Chat model without the strict JSON requirement
+# Chat model optimized for ultra-fast, conversational voice interaction
 chat_model = genai.GenerativeModel(
     model_name="gemini-3.8-flash",
-    system_instruction="You are MechAI, a friendly and experienced automotive workshop co-pilot created by TorqueIQ. The user is asking follow-up questions about a diagnosis. Answer clearly, practically, and concisely.",
+    system_instruction="""You are MechAI, the mechanic's trusted workshop co-pilot created by TorqueIQ.
+You are communicating directly via real-time VOICE with a busy technician working on a car in a garage.
+RULES FOR YOUR VOICE REPLIES:
+1. Be ultra-concise, conversational, and direct (1 to 2 crisp sentences max, strictly under 25 words).
+2. Answer the question immediately without disclaimers, preamble, or filler.
+3. NEVER use markdown symbols, asterisks (**), bullet points, or numbered lists, because your answer is spoken out loud through text-to-speech.
+4. If Hindi is requested, speak in natural garage Hindi using common mechanic terminology.""",
     generation_config={
-        "temperature": 0.3,
+        "temperature": 0.2,
         "top_p": 0.8,
+        "max_output_tokens": 100
     }
 )
 
 async def chat_followup(conversation_history: list, new_message: str, language: str = "en") -> str:
-    """Handle follow-up chat questions after initial diagnosis with language support."""
+    """Handle follow-up chat questions after initial diagnosis with ultra-fast latency."""
     formatted_history = []
-    for msg in conversation_history:
+    # Keep only the last 4 exchanges to keep context compact and super fast
+    for msg in conversation_history[-4:]:
         formatted_history.append({
             "role": msg["role"],
             "parts": msg["parts"]
@@ -142,7 +150,10 @@ async def chat_followup(conversation_history: list, new_message: str, language: 
     
     msg_to_send = new_message
     if language in ["hi", "hindi"]:
-        msg_to_send += "\n[IMPORTANT: Please respond in clear, natural Hindi so the workshop mechanic can understand easily.]"
+        msg_to_send += "\n[Reply in 1-2 punchy sentences in clear, natural Hindi for voice speech. Under 25 words.]"
+    else:
+        msg_to_send += "\n[Reply in 1-2 punchy sentences in clear, direct English for voice speech. Under 25 words.]"
 
     response = chat.send_message(msg_to_send)
-    return response.text
+    cleaned = response.text.replace('*', '').replace('#', '').strip()
+    return cleaned

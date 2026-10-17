@@ -22,12 +22,29 @@ export default function DiagnosisReport({ data, language = 'en' }) {
   // Voice Assistant State
   const [voiceModeActive, setVoiceModeActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState([]);
   const recognitionRef = useRef(null);
   const voiceModeRef = useRef(false);
 
   useEffect(() => {
     voiceModeRef.current = voiceModeActive;
   }, [voiceModeActive]);
+
+  useEffect(() => {
+    const loadVoices = () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        const vList = window.speechSynthesis.getVoices();
+        if (vList && vList.length > 0) {
+          setAvailableVoices(vList);
+        }
+      }
+    };
+    loadVoices();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   // Job Sheet & Interactive Steps State
   const [showJobSheet, setShowJobSheet] = useState(false);
@@ -49,6 +66,65 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     ? <FaExclamationTriangle className="text-yellow-400" />
     : <FaTimesCircle className="text-red-400" />;
 
+  // Instant acoustic feedback chime (subtle 100ms tone)
+  const playChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.13);
+    } catch(e) {}
+  };
+
+  // Select ultra-natural, realistic human voices (Google Neural / Edge Natural)
+  const selectBestVoice = (lang) => {
+    const voices = (availableVoices.length > 0 ? availableVoices : (window.speechSynthesis ? window.speechSynthesis.getVoices() : [])) || [];
+    if (!voices || voices.length === 0) return null;
+
+    if (lang === 'hi') {
+      // 1. Edge Natural Online Hindi (Ultra-realistic)
+      const naturalHi = voices.find(v => (v.lang.startsWith('hi') || v.lang === 'hi_IN') && (v.name.includes('Natural') || v.name.includes('Online')));
+      if (naturalHi) return naturalHi;
+      // 2. Google Hindi (Chrome Neural)
+      const googleHi = voices.find(v => (v.lang.startsWith('hi') || v.lang === 'hi_IN') && v.name.includes('Google'));
+      if (googleHi) return googleHi;
+      // 3. Any available Hindi voice
+      return voices.find(v => v.lang.startsWith('hi') || v.name.toLowerCase().includes('hindi') || v.lang === 'hi_IN') || null;
+    } else {
+      // English
+      // 1. Edge Online Natural (Jenny, Guy, Aria, Christopher) - studio quality AI
+      const naturalEn = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Online') || v.name.includes('Neural')));
+      if (naturalEn) return naturalEn;
+      // 2. Google US / UK English (Chrome neural web voice)
+      const googleEn = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'));
+      if (googleEn) return googleEn;
+      // 3. Apple Samantha or Siri
+      const appleEn = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Samantha') || v.name.includes('Siri') || v.name.includes('Karen')));
+      if (appleEn) return appleEn;
+      // 4. Microsoft Jenny / Aria / Guy
+      const msModern = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Jenny') || v.name.includes('Aria') || v.name.includes('Guy')));
+      if (msModern) return msModern;
+      // 5. Microsoft Zira (female, much smoother than David)
+      const zira = voices.find(v => v.lang.startsWith('en') && v.name.includes('Zira'));
+      if (zira) return zira;
+      // 6. Non-David fallback
+      const nonDavid = voices.find(v => v.lang.startsWith('en') && !v.name.includes('David'));
+      if (nonDavid) return nonDavid;
+
+      return voices.find(v => v.lang.startsWith('en')) || null;
+    }
+  };
+
   const initSpeechRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
@@ -61,7 +137,6 @@ export default function DiagnosisReport({ data, language = 'en' }) {
     recognition.onstart = () => setIsListening(true);
     
     recognition.onresult = (event) => {
-      // Find the latest result that is final
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -71,15 +146,14 @@ export default function DiagnosisReport({ data, language = 'en' }) {
       
       if (finalTranscript.trim()) {
         setChatInput(finalTranscript);
-        // Stop listening temporarily while we process and the AI speaks
+        playChime(); // Instant audio cue!
         try { recognition.stop(); } catch(e) {}
-        setTimeout(() => triggerSend(finalTranscript), 200);
+        triggerSend(finalTranscript); // Immediate trigger without 200ms lag
       }
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      // If voice mode is still supposed to be active, and AI is NOT currently speaking, restart it
       if (window.isVoiceModeIntentionallyActive && !window.speechSynthesis.speaking) {
         setTimeout(() => {
           try { recognition.start(); } catch(e) {}
@@ -107,51 +181,54 @@ export default function DiagnosisReport({ data, language = 'en' }) {
         .trim();
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.rate = 1.0;
+      utterance.rate = 1.04; // Natural human conversational tempo
       utterance.pitch = 1.0;
       utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
 
-      // Pick an appropriate voice based on language
-      const voices = window.speechSynthesis.getVoices();
-      if (voices && voices.length > 0) {
-        if (language === 'hi') {
-          const hindiVoice = voices.find(v => v.lang.startsWith('hi') || v.name.toLowerCase().includes('hindi') || v.lang === 'hi_IN');
-          if (hindiVoice) utterance.voice = hindiVoice;
-        } else {
-          const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('David')));
-          if (preferredVoice) utterance.voice = preferredVoice;
-        }
+      // Pick top neural/natural voice
+      const bestVoice = selectBestVoice(language);
+      if (bestVoice) {
+        utterance.voice = bestVoice;
       }
 
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+      };
+
       utterance.onend = () => {
+        setIsSpeaking(false);
         // AI finished speaking, restart listening if we're in voice mode
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(e) {}
-          }, 300);
+          }, 250);
         }
       };
 
       utterance.onerror = (e) => {
+        setIsSpeaking(false);
         console.warn('Speech synthesis error:', e);
         if (window.isVoiceModeIntentionallyActive && recognitionRef.current) {
           setTimeout(() => {
             try { recognitionRef.current.start(); } catch(err) {}
-          }, 300);
+          }, 250);
         }
       };
 
       window.speechSynthesis.speak(utterance);
     } catch (err) {
+      setIsSpeaking(false);
       console.error('speakText error:', err);
     }
   };
+
 
   const toggleVoiceMode = () => {
     if (voiceModeActive) {
       setVoiceModeActive(false);
       window.isVoiceModeIntentionallyActive = false;
       setIsListening(false);
+      setIsSpeaking(false);
       window.speechSynthesis.cancel();
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch(e) {}
@@ -467,12 +544,31 @@ export default function DiagnosisReport({ data, language = 'en' }) {
           >
             {voiceModeActive ? (
               <>
-                {isListening ? <FaMicrophone className="animate-pulse" /> : <FaVolumeUp className="animate-pulse" />}
-                {isListening ? 'Listening...' : 'Speaking...'}
+                {chatLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-amber-300 border-t-transparent rounded-full animate-spin" />
+                    <span>{language === 'hi' ? 'सोच रहा हूँ...' : 'Thinking...'}</span>
+                  </>
+                ) : isSpeaking ? (
+                  <>
+                    <FaVolumeUp className="animate-bounce text-emerald-300" />
+                    <span>{language === 'hi' ? 'बोल रहा हूँ...' : 'Speaking...'}</span>
+                  </>
+                ) : isListening ? (
+                  <>
+                    <FaMicrophone className="animate-pulse text-red-400" />
+                    <span>{language === 'hi' ? 'सुन रहा हूँ...' : 'Listening...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <FaVolumeUp className="text-blue-300" />
+                    <span>{language === 'hi' ? 'तैयार' : 'Ready'}</span>
+                  </>
+                )}
               </>
             ) : (
               <>
-                <FaMicrophone /> Hands-Free Assistant
+                <FaMicrophone /> {language === 'hi' ? 'वॉइस असिस्टेंट' : 'Hands-Free Assistant'}
               </>
             )}
           </button>

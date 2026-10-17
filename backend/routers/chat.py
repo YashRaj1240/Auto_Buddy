@@ -49,9 +49,13 @@ async def send_chat_message(payload: ChatMessage):
         history = await try_get_chat_history(payload.session_id)
 
         if not history:
-            context_intro = f"You previously diagnosed this vehicle: Car: {diagnosis_data.get('car_info')} Issue: {diagnosis_data.get('issue_description')} Your diagnosis: {diagnosis_data.get('diagnosis')}. Now answer follow-up questions from the technician in simple, plain English."
+            diag = diagnosis_data.get('diagnosis', {})
+            summary = diag.get('summary', '') if isinstance(diag, dict) else str(diag)[:150]
+            car = diagnosis_data.get('car_info', {})
+            car_str = f"{car.get('year', '')} {car.get('brand', '')} {car.get('model', '')}".strip() if isinstance(car, dict) else str(car)
+            context_intro = f"Vehicle: {car_str}. Issue: {diagnosis_data.get('issue_description')}. Diagnosis: {summary}."
             history = [{"role": "user", "parts": [context_intro]},
-                      {"role": "model", "parts": ["Understood. I have the full diagnosis context. Please ask your follow-up questions."]}]
+                      {"role": "model", "parts": ["Ready. How can I help with this repair?"]}]
 
         await try_save_chat_message(payload.session_id, "user", payload.message)
         
